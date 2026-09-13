@@ -181,37 +181,6 @@ def chat_node(state: ChatState):
         "messages": [response]
     }
 
-
-# ============================================================
-# DATABASE CONNECTION POOL
-# ============================================================
-
-DB_URI = db_API_KEY
-
-connection_kwargs = {
-    "autocommit": True,
-    "prepare_threshold": 0,
-}
-
-
-pool = ConnectionPool(
-    conninfo=DB_URI,
-    kwargs=connection_kwargs,
-    min_size=1,
-    max_size=10,
-)
-
-
-# ============================================================
-# LANGGRAPH POSTGRES CHECKPOINTER
-# ============================================================
-
-checkpointer = PostgresSaver(pool)
-
-# Creates/checks the LangGraph checkpoint tables.
-checkpointer.setup()
-
-
 # ============================================================
 # APPLICATION-SPECIFIC THREAD TABLE
 # ============================================================
@@ -237,14 +206,47 @@ def setup_conversation_table():
     ON conversation_threads (patient_id, created_at DESC)
     """
 
-    with connection.cursor() as cursor:
-        cursor.execute(create_table_sql)
-        cursor.execute(create_index_sql)
-        cursor.execute(create_created_index_sql)
+    with pool.connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(create_table_sql)
+            cursor.execute(create_index_sql)
+            cursor.execute(create_created_index_sql)
+        conn.commit()
 
-    connection.commit()
+# ============================================================
+# DATABASE CONNECTION POOL
+# ============================================================
 
+connection_kwargs = {
+    "autocommit": True,
+    "prepare_threshold": 0,
+}
+
+pool = ConnectionPool(
+    conninfo=DB_URI,
+    kwargs=connection_kwargs,
+    min_size=1,
+    max_size=10,
+)
+
+checkpointer = PostgresSaver(pool)
+
+checkpointer.setup()
+
+# Create PatientID <-> thread_id mapping table
 setup_conversation_table()
+
+
+# ============================================================
+# LANGGRAPH POSTGRES CHECKPOINTER
+# ============================================================
+
+checkpointer = PostgresSaver(pool)
+
+# Creates/checks the LangGraph checkpoint tables.
+checkpointer.setup()
+
+
 
 
 # ============================================================
