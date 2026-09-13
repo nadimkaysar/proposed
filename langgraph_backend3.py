@@ -217,26 +217,32 @@ checkpointer.setup()
 # ============================================================
 
 def setup_conversation_table():
+    """Create the table used to map PatientID to conversation threads."""
 
     create_table_sql = """
     CREATE TABLE IF NOT EXISTS conversation_threads (
         thread_id TEXT PRIMARY KEY,
         patient_id TEXT NOT NULL,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_conversation_threads_patient_id
-    ON conversation_threads (patient_id);
+    )
     """
 
-    with pool.connection() as conn:
+    create_index_sql = """
+    CREATE INDEX IF NOT EXISTS idx_conversation_threads_patient_id
+    ON conversation_threads (patient_id)
+    """
 
-        with conn.cursor() as cursor:
+    create_created_index_sql = """
+    CREATE INDEX IF NOT EXISTS idx_conversation_threads_patient_created
+    ON conversation_threads (patient_id, created_at DESC)
+    """
 
-            cursor.execute(
-                create_table_sql
-            )
+    with connection.cursor() as cursor:
+        cursor.execute(create_table_sql)
+        cursor.execute(create_index_sql)
+        cursor.execute(create_created_index_sql)
 
+    connection.commit()
 
 setup_conversation_table()
 
