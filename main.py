@@ -1,5 +1,5 @@
 import streamlit as st
-from langgraph_backend3 import chatbot, retrieve_all_threads
+from langgraph_backend3 import chatbot
 from langchain_core.messages import HumanMessage
 import uuid
 import response
@@ -253,24 +253,41 @@ def create_conversation_txt(thread_id):
 # Session Setup
 # ============================================================
 
-if "message_history" not in st.session_state:
+# if "message_history" not in st.session_state:
 
+#     st.session_state["message_history"] = []
+
+
+# if "thread_id" not in st.session_state:
+
+#     st.session_state["thread_id"] = (
+#         generate_thread_id()
+#     )
+
+
+# if "chat_threads" not in st.session_state:
+
+#     st.session_state["chat_threads"] = (
+#         retrieve_all_threads()
+#     )
+
+# add_thread(
+#     st.session_state["thread_id"]
+# )
+
+if "message_history" not in st.session_state:
     st.session_state["message_history"] = []
 
-
 if "thread_id" not in st.session_state:
+    st.session_state["thread_id"] = generate_thread_id()
 
-    st.session_state["thread_id"] = (
-        generate_thread_id()
-    )
-
-
+# IMPORTANT:
+# Each Streamlit browser session gets its own thread list.
+# Do NOT load all threads from PostgreSQL here.
 if "chat_threads" not in st.session_state:
+    st.session_state["chat_threads"] = []
 
-    st.session_state["chat_threads"] = (
-        retrieve_all_threads()
-    )
-
+# Add the current thread to THIS browser session only
 add_thread(
     st.session_state["thread_id"]
 )
