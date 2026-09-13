@@ -1,49 +1,47 @@
 from langgraph.graph import StateGraph, START, END
 from typing import TypedDict, Annotated
-from langchain_core.messages import BaseMessage, HumanMessage
-from langchain_openai import ChatOpenAI
-from langgraph.checkpoint.postgres import PostgresSaver
-from langgraph.graph.message import add_messages
-# from psycopg import connect
-from psycopg_pool import ConnectionPool
-from langchain_core.prompts import ChatPromptTemplate
-# from langchain_core.messages import HumanMessage
+
 from langchain_core.messages import (
     BaseMessage,
     SystemMessage,
     HumanMessage,
 )
+
+from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.graph.message import add_messages
+
+from psycopg_pool import ConnectionPool
+
 import streamlit as st
 
-OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 
+# ============================================================
+# API KEYS
+# ============================================================
+
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 db_API_KEY = st.secrets["DB_API_KEY"]
 
+
+# ============================================================
+# LLM
+# ============================================================
 
 llm = ChatOpenAI(
     model="gpt-4.1",
     temperature=0.6,
-    openai_api_key=OPENAI_API_KEY)
+    openai_api_key=OPENAI_API_KEY
+)
+
+
+# ============================================================
+# CHAT STATE
+# ============================================================
 
 class ChatState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     component: str
-
-# def chat_node(state: ChatState):
-#     messages = state['messages']
-#     response = llm.invoke(messages)
-#     return {"messages": [response]}
-
-# SYSTEM_PROMPT = """
-# You are a mental health specialist with CBT and empathetic AI assistant. Your role is counseling.
-
-# Your role is to:
-# - Understand the user's message carefully.
-# - Respond clearly and naturally.
-# - Be empathetic and respectful.
-# - Ask clarifying questions when necessary.
-# - Do not make up information.
-# """
 
 def systemPrompt(component):
     SYSTEM_PROMPT1 = f"""Context: You are a dialactical behaviour specialist mental health psychologist.To counseling you have to work in two phases: 1 problem_understanding_phase, 2 counseling_phase.
@@ -150,168 +148,259 @@ def systemPrompt(component):
     """
     return SYSTEM_PROMPT1
 
-# def chat_node(state: ChatState):
-#     messages = state['messages']
-#     response = llm.invoke(messages)
-#     return {"messages": [response]}
 
-# support_prompt = ChatPromptTemplate.from_messages([
-#     ("system", SYSTEM_PROMPT2),
-#     ("human", "{user_input}")
-# ])
 
-# def chat_node(state: ChatState):
-#     # user_input = state["messages"][-1].content
 
-#     # prompt = support_prompt.invoke({
-#     #     # "component": "Mindfulness",
-#     #     # "skill": "Non-judgmental Stance",
-#     #     "conversation": state["messages"],
-#     #     "user_input": user_input
-#     # })
-#     user_input = state["messages"][-1].content
-#     prompt = support_prompt.invoke({
-#         "conversation": state["messages"],
-#         "user_input": user_input
-#     })
-
-#     response = llm.invoke(prompt)
-
-#     return {
-#         "messages": [response]
-#     }
+# ============================================================
+# CHAT NODE
+# ============================================================
 
 def chat_node(state: ChatState):
+
     messages = state["messages"]
 
     component_action = state.get(
         "component",
         ""
     )
+
     prompt = systemPrompt(component_action)
+
     print("System Prompt", prompt)
+
     messages_with_system_prompt = [
         SystemMessage(content=prompt),
         *messages
     ]
-    response = llm.invoke(messages_with_system_prompt)
 
-    return {"messages": [response]}
+    response = llm.invoke(
+        messages_with_system_prompt
+    )
 
-# conn = sqlite3.connect(database='chatbot.db', check_same_thread=False)
-# # Checkpointer
-# checkpointer = SqliteSaver(conn=conn)
+    return {
+        "messages": [response]
+    }
 
 
-
-# checkpointer = None
-# try:
-
-#     print("Connecting to Neon database...")
-
-#     checkpointer_cm = PostgresSaver.from_conn_string(DB_URI)
-
-#     checkpointer = checkpointer_cm.__enter__()
-
-#     print("Connected to Neon")
-
-#     print("Setting up checkpoint tables...")
-
-#     checkpointer.setup()
-
-#     print("Database setup complete")
-
-# except Exception as e:
-
-#     print("DATABASE CONNECTION ERROR:")
-#     print(e)
+# ============================================================
+# DATABASE CONNECTION POOL
+# ============================================================
 
 DB_URI = db_API_KEY
-
-# #     checkpointer = None
-# # Neon PostgreSQL connection string
-
-# # Create PostgreSQL connection
-# conn = connect(DB_URI, autocommit=True)
-
-# # Postgres checkpointer
-# checkpointer = PostgresSaver(conn)
-
-# # IMPORTANT: create tables first
-# checkpointer.setup()
 
 connection_kwargs = {
     "autocommit": True,
     "prepare_threshold": 0,
 }
+
+
 pool = ConnectionPool(
     conninfo=DB_URI,
     kwargs=connection_kwargs,
     min_size=1,
     max_size=10,
 )
+
+
+# ============================================================
+# LANGGRAPH POSTGRES CHECKPOINTER
+# ============================================================
+
 checkpointer = PostgresSaver(pool)
+
+# Creates/checks the LangGraph checkpoint tables.
 checkpointer.setup()
 
-# graph = StateGraph(ChatState)
-# graph.add_node("chat_node", chat_node)
-# graph.add_edge(START, "chat_node")
-# graph.add_edge("chat_node", END)
 
-# if checkpointer is None:
-#     raise RuntimeError("Checkpointer not initialized. Database connection failed.")
+# ============================================================
+# APPLICATION-SPECIFIC THREAD TABLE
+# ============================================================
 
-# chatbot = graph.compile(checkpointer=checkpointer)
-graph = StateGraph(ChatState)
+def setup_conversation_table():
 
-graph.add_node("chat_node", chat_node)
-graph.add_edge(START, "chat_node")
-graph.add_edge("chat_node", END)
+    create_table_sql = """
+    CREATE TABLE IF NOT EXISTS conversation_threads (
+        thread_id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    );
 
-if checkpointer is None:
-    raise RuntimeError(
-        "Checkpointer not initialized. Database connection failed."
+    CREATE INDEX IF NOT EXISTS idx_conversation_threads_patient_id
+    ON conversation_threads (patient_id);
+    """
+
+    with pool.connection() as conn:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute(
+                create_table_sql
+            )
+
+
+setup_conversation_table()
+
+
+# ============================================================
+# REGISTER THREAD
+# ============================================================
+
+def register_thread(thread_id, patient_id):
+
+    if not thread_id:
+        return
+
+    if not patient_id:
+        return
+
+    sql = """
+    INSERT INTO conversation_threads (
+        thread_id,
+        patient_id
     )
+    VALUES (%s, %s)
+    ON CONFLICT (thread_id)
+    DO NOTHING;
+    """
 
-chatbot = graph.compile(checkpointer=checkpointer)
+    with pool.connection() as conn:
 
-# def retrieve_all_threads():
-#     all_threads = set()
-#     for checkpoint in checkpointer.list(None):
-#         all_threads.add(checkpoint.config['configurable']['thread_id'])
+        with conn.cursor() as cursor:
 
-#     return list(all_threads)
+            cursor.execute(
+                sql,
+                (
+                    str(thread_id),
+                    str(patient_id)
+                )
+            )
 
 
-def retrieve_all_threads():
+# ============================================================
+# GET THREADS FOR PATIENT
+# ============================================================
 
-    if not checkpointer:
+def retrieve_threads_for_patient(patient_id):
+
+    if not patient_id:
         return []
 
-    all_threads = set()
+    sql = """
+    SELECT thread_id
+    FROM conversation_threads
+    WHERE patient_id = %s
+    ORDER BY created_at DESC;
+    """
 
     try:
 
-        for checkpoint in checkpointer.list(None):
+        with pool.connection() as conn:
 
-            config = checkpoint.config or {}
+            with conn.cursor() as cursor:
 
-            configurable = config.get(
-                "configurable",
-                {}
-            )
+                cursor.execute(
+                    sql,
+                    (str(patient_id),)
+                )
 
-            thread_id = configurable.get(
-                "thread_id"
-            )
+                rows = cursor.fetchall()
 
-            if thread_id:
-                all_threads.add(thread_id)
+        return [
+            row[0]
+            for row in rows
+        ]
 
     except Exception as e:
 
-        print("Thread retrieval error:")
+        print(
+            "Patient thread retrieval error:"
+        )
         print(e)
 
-    return list(all_threads)
+        return []
 
+
+# ============================================================
+# CHECK THREAD OWNERSHIP
+# ============================================================
+
+def thread_belongs_to_patient(
+    thread_id,
+    patient_id
+):
+
+    if not thread_id or not patient_id:
+        return False
+
+    sql = """
+    SELECT 1
+    FROM conversation_threads
+    WHERE thread_id = %s
+      AND patient_id = %s
+    LIMIT 1;
+    """
+
+    try:
+
+        with pool.connection() as conn:
+
+            with conn.cursor() as cursor:
+
+                cursor.execute(
+                    sql,
+                    (
+                        str(thread_id),
+                        str(patient_id)
+                    )
+                )
+
+                result = cursor.fetchone()
+
+        return result is not None
+
+    except Exception as e:
+
+        print(
+            "Thread ownership check error:"
+        )
+        print(e)
+
+        return False
+
+
+# ============================================================
+# GRAPH
+# ============================================================
+
+graph = StateGraph(ChatState)
+
+graph.add_node(
+    "chat_node",
+    chat_node
+)
+
+graph.add_edge(
+    START,
+    "chat_node"
+)
+
+graph.add_edge(
+    "chat_node",
+    END
+)
+
+
+# ============================================================
+# COMPILE GRAPH
+# ============================================================
+
+if checkpointer is None:
+
+    raise RuntimeError(
+        "Checkpointer not initialized. "
+        "Database connection failed."
+    )
+
+chatbot = graph.compile(
+    checkpointer=checkpointer
+)
