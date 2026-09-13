@@ -2,16 +2,16 @@ import streamlit as st
 from langgraph_backend3 import chatbot, retrieve_all_threads
 from langchain_core.messages import HumanMessage
 import uuid
-from datetime import datetime
 import response
 import gameTree
 import json
+from datetime import datetime, timezone
 
 def generate_thread_id():
     return str(uuid.uuid4())
 
 def get_current_time():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 def add_thread(thread_id):
     if thread_id not in st.session_state["chat_threads"]:
