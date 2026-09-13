@@ -5,3 +5,4 @@ langchain-openai==0.2.14
 langgraph-checkpoint-postgres==2.0.15
 psycopg[binary]
 streamlit
+psycopg-pool
