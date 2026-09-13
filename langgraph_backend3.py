@@ -4,7 +4,8 @@ from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph.message import add_messages
-from psycopg import connect
+# from psycopg import connect
+from psycopg_pool import ConnectionPool
 from langchain_core.prompts import ChatPromptTemplate
 # from langchain_core.messages import HumanMessage
 from langchain_core.messages import (
@@ -201,7 +202,7 @@ def chat_node(state: ChatState):
 # # Checkpointer
 # checkpointer = SqliteSaver(conn=conn)
 
-DB_URI = db_API_KEY
+
 
 # checkpointer = None
 # try:
@@ -225,26 +226,52 @@ DB_URI = db_API_KEY
 #     print("DATABASE CONNECTION ERROR:")
 #     print(e)
 
-#     checkpointer = None
-# Neon PostgreSQL connection string
+DB_URI = db_API_KEY
 
-# Create PostgreSQL connection
-conn = connect(DB_URI, autocommit=True)
+# #     checkpointer = None
+# # Neon PostgreSQL connection string
 
-# Postgres checkpointer
-checkpointer = PostgresSaver(conn)
+# # Create PostgreSQL connection
+# conn = connect(DB_URI, autocommit=True)
 
-# IMPORTANT: create tables first
+# # Postgres checkpointer
+# checkpointer = PostgresSaver(conn)
+
+# # IMPORTANT: create tables first
+# checkpointer.setup()
+
+connection_kwargs = {
+    "autocommit": True,
+    "prepare_threshold": 0,
+}
+pool = ConnectionPool(
+    conninfo=DB_URI,
+    kwargs=connection_kwargs,
+    min_size=1,
+    max_size=10,
+)
+checkpointer = PostgresSaver(pool)
 checkpointer.setup()
 
+# graph = StateGraph(ChatState)
+# graph.add_node("chat_node", chat_node)
+# graph.add_edge(START, "chat_node")
+# graph.add_edge("chat_node", END)
 
+# if checkpointer is None:
+#     raise RuntimeError("Checkpointer not initialized. Database connection failed.")
+
+# chatbot = graph.compile(checkpointer=checkpointer)
 graph = StateGraph(ChatState)
+
 graph.add_node("chat_node", chat_node)
 graph.add_edge(START, "chat_node")
 graph.add_edge("chat_node", END)
 
 if checkpointer is None:
-    raise RuntimeError("Checkpointer not initialized. Database connection failed.")
+    raise RuntimeError(
+        "Checkpointer not initialized. Database connection failed."
+    )
 
 chatbot = graph.compile(checkpointer=checkpointer)
 
