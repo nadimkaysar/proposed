@@ -216,7 +216,7 @@ def setup_conversation_table():
 # ============================================================
 # DATABASE CONNECTION POOL
 # ============================================================
-
+DB_URI = db_API_KEY
 connection_kwargs = {
     "autocommit": True,
     "prepare_threshold": 0,
