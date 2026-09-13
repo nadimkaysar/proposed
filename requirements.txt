@@ -1,0 +1,7 @@
+langgraph==0.2.67
+langchain==0.3.19
+langchain-core==0.3.37
+langchain-openai==0.2.14
+langgraph-checkpoint-postgres==2.0.15
+psycopg[binary]
+streamlit
