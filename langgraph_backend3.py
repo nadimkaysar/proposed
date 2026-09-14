@@ -182,6 +182,37 @@ def chat_node(state: ChatState):
     }
 
 # ============================================================
+# DATABASE CONNECTION POOL
+# ============================================================
+DB_URI = db_API_KEY
+connection_kwargs = {
+    "autocommit": True,
+    "prepare_threshold": 0,
+}
+
+DB_URI = db_API_KEY
+
+connection_kwargs = {
+    "autocommit": True,
+    "prepare_threshold": 0,
+}
+
+pool = ConnectionPool(
+    conninfo=DB_URI,
+    kwargs=connection_kwargs,
+    min_size=1,
+    max_size=10,
+    max_lifetime=300,
+    max_idle=60,
+    timeout=30,
+    open=True,
+)
+
+pool.wait()
+
+
+
+# ============================================================
 # APPLICATION-SPECIFIC THREAD TABLE
 # ============================================================
 
@@ -213,53 +244,12 @@ def setup_conversation_table():
             cursor.execute(create_created_index_sql)
         conn.commit()
 
-# ============================================================
-# DATABASE CONNECTION POOL
-# ============================================================
-DB_URI = db_API_KEY
-connection_kwargs = {
-    "autocommit": True,
-    "prepare_threshold": 0,
-}
-
-DB_URI = db_API_KEY
-
-connection_kwargs = {
-    "autocommit": True,
-    "prepare_threshold": 0,
-}
-
-pool = ConnectionPool(
-    conninfo=DB_URI,
-    kwargs=connection_kwargs,
-    min_size=1,
-    max_size=10,
-    max_lifetime=300,
-    max_idle=60,
-    timeout=30,
-    open=True,
-)
-
-pool.wait()
-
 checkpointer = PostgresSaver(pool)
 
 checkpointer.setup()
 
 # Create PatientID <-> thread_id mapping table
 setup_conversation_table()
-
-
-# ============================================================
-# LANGGRAPH POSTGRES CHECKPOINTER
-# ============================================================
-
-checkpointer = PostgresSaver(pool)
-
-# Creates/checks the LangGraph checkpoint tables.
-checkpointer.setup()
-
-
 
 
 # ============================================================
