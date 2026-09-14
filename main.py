@@ -1,19 +1,15 @@
 import streamlit as st
-
 from langgraph_backend3 import (
     chatbot,
     register_thread,
     retrieve_threads_for_patient,
     thread_belongs_to_patient,
 )
-
 from langchain_core.messages import HumanMessage
-
 import uuid
 import response
 import gameTree
 import json
-
 from datetime import datetime, timezone
 
 
@@ -102,7 +98,7 @@ def create_new_thread(patient_id):
 
 
 # ============================================================
-# RESET CHAT
+# RESET CHAT / CREATE NEW CONVERSATION
 # ============================================================
 
 def reset_chat():
@@ -130,8 +126,11 @@ def load_conversation(
     patient_id
 ):
 
+    # --------------------------------------------------------
     # Security check:
     # Only load a thread belonging to this patient.
+    # --------------------------------------------------------
+
     if not thread_belongs_to_patient(
         thread_id,
         patient_id
@@ -171,6 +170,114 @@ def load_conversation(
         )
 
         return []
+
+
+# ============================================================
+# REBUILD SESSION HISTORY FROM LANGGRAPH MESSAGES
+# ============================================================
+
+def rebuild_conversation_history(
+    messages
+):
+
+    temp_messages = []
+
+    history = []
+
+    for msg in messages:
+
+        # ----------------------------------------------------
+        # Determine role
+        # ----------------------------------------------------
+
+        if isinstance(
+            msg,
+            HumanMessage
+        ):
+
+            role = "user"
+
+        else:
+
+            role = "assistant"
+
+
+        # ----------------------------------------------------
+        # Timestamp
+        # ----------------------------------------------------
+
+        timestamp = (
+            "Time not available"
+        )
+
+        if hasattr(
+            msg,
+            "additional_kwargs"
+        ):
+
+            timestamp = (
+                msg.additional_kwargs.get(
+                    "timestamp",
+                    "Time not available"
+                )
+            )
+
+
+        # ----------------------------------------------------
+        # Component
+        # ----------------------------------------------------
+
+        component = None
+
+        if hasattr(
+            msg,
+            "additional_kwargs"
+        ):
+
+            component = (
+                msg.additional_kwargs.get(
+                    "component"
+                )
+            )
+
+
+        # ----------------------------------------------------
+        # Message history
+        # ----------------------------------------------------
+
+        temp_message = {
+            "role": role,
+            "content": msg.content,
+            "time": timestamp
+        }
+
+
+        if (
+            role == "assistant"
+            and component
+        ):
+
+            temp_message[
+                "component"
+            ] = component
+
+
+        temp_messages.append(
+            temp_message
+        )
+
+
+        # ----------------------------------------------------
+        # History for reward/game tree
+        # ----------------------------------------------------
+
+        history.append({
+            "role": role,
+            "content": msg.content
+        })
+
+
+    return temp_messages, history
 
 
 # ============================================================
@@ -310,8 +417,11 @@ if "active_patient_id" not in st.session_state:
 
 if PatinetID:
 
-    # First time entering PatientID
-    # OR PatientID has changed.
+    # --------------------------------------------------------
+    # First time entering Patient ID
+    # OR Patient ID has changed
+    # --------------------------------------------------------
+
     if (
         st.session_state[
             "active_patient_id"
@@ -319,43 +429,178 @@ if PatinetID:
         != PatinetID
     ):
 
+        # ----------------------------------------------------
+        # Remember current Patient ID
+        # ----------------------------------------------------
+
         st.session_state[
             "active_patient_id"
         ] = PatinetID
 
-        # Get only this patient's conversations
+
+        # ----------------------------------------------------
+        # Retrieve only this patient's conversations
+        # ----------------------------------------------------
+
+        patient_threads = (
+            retrieve_threads_for_patient(
+                PatinetID
+            )
+        )
+
+
         st.session_state[
             "chat_threads"
-        ] = retrieve_threads_for_patient(
-            PatinetID
-        )
+        ] = patient_threads
 
-        # Start a new active conversation.
-        create_new_thread(
-            PatinetID
-        )
+
+        # ====================================================
+        # CASE 1:
+        # Previous conversations exist
+        # ====================================================
+
+        if patient_threads:
+
+            # ------------------------------------------------
+            # Select the most recent conversation
+            #
+            # Backend returns:
+            # newest -> oldest
+            # ------------------------------------------------
+
+            selected_thread = (
+                patient_threads[0]
+            )
+
+
+            st.session_state[
+                "thread_id"
+            ] = selected_thread
+
+
+            # ------------------------------------------------
+            # Verify ownership
+            # ------------------------------------------------
+
+            if thread_belongs_to_patient(
+                selected_thread,
+                PatinetID
+            ):
+
+                # --------------------------------------------
+                # Load conversation from LangGraph
+                # --------------------------------------------
+
+                messages = load_conversation(
+                    selected_thread,
+                    PatinetID
+                )
+
+
+                # --------------------------------------------
+                # Rebuild message/history
+                # --------------------------------------------
+
+                (
+                    temp_messages,
+                    history
+                ) = rebuild_conversation_history(
+                    messages
+                )
+
+
+                # --------------------------------------------
+                # Save loaded conversation
+                # --------------------------------------------
+
+                st.session_state[
+                    "message_history"
+                ] = temp_messages
+
+
+                st.session_state[
+                    "history"
+                ] = history
+
+
+                # --------------------------------------------
+                # Reset DBT action
+                #
+                # Next user message will select a new action.
+                # --------------------------------------------
+
+                st.session_state[
+                    "action"
+                ] = []
+
+
+            else:
+
+                # ------------------------------------------------
+                # Ownership verification failed.
+                # Create a new conversation instead.
+                # ------------------------------------------------
+
+                st.sidebar.error(
+                    "Could not verify conversation ownership."
+                )
+
+                create_new_thread(
+                    PatinetID
+                )
+
+
+        # ====================================================
+        # CASE 2:
+        # No previous conversation exists
+        # ====================================================
+
+        else:
+
+            create_new_thread(
+                PatinetID
+            )
+
+
+        # ----------------------------------------------------
+        # IMPORTANT:
+        # Rerun immediately so the loaded conversation
+        # appears without manually refreshing the page.
+        # ----------------------------------------------------
+
+        st.rerun()
+
 
 else:
+
+    # ========================================================
+    # NO PATIENT ID
+    # ========================================================
 
     st.session_state[
         "active_patient_id"
     ] = None
 
+
     st.session_state[
         "chat_threads"
     ] = []
+
 
     st.session_state[
         "thread_id"
     ] = None
 
+
     st.session_state[
         "message_history"
     ] = []
 
+
     st.session_state[
         "history"
     ] = []
+
 
     st.session_state[
         "action"
@@ -393,10 +638,13 @@ st.sidebar.header(
 )
 
 
+# Backend returns newest -> oldest,
+# so we display in the same order.
+
 for thread_id in (
     st.session_state[
         "chat_threads"
-    ][::-1]
+    ]
 ):
 
     if st.sidebar.button(
@@ -441,101 +689,15 @@ for thread_id in (
 
 
         # ----------------------------------------------------
-        # Convert LangChain messages
+        # Rebuild session history
         # ----------------------------------------------------
 
-        temp_messages = []
-
-        history = []
-
-
-        for msg in messages:
-
-            if isinstance(
-                msg,
-                HumanMessage
-            ):
-
-                role = "user"
-
-            else:
-
-                role = "assistant"
-
-
-            # ------------------------------------------------
-            # Timestamp
-            # ------------------------------------------------
-
-            timestamp = (
-                "Time not available"
-            )
-
-            if hasattr(
-                msg,
-                "additional_kwargs"
-            ):
-
-                timestamp = (
-                    msg.additional_kwargs.get(
-                        "timestamp",
-                        "Time not available"
-                    )
-                )
-
-
-            # ------------------------------------------------
-            # Component
-            # ------------------------------------------------
-
-            component = None
-
-            if hasattr(
-                msg,
-                "additional_kwargs"
-            ):
-
-                component = (
-                    msg.additional_kwargs.get(
-                        "component"
-                    )
-                )
-
-
-            # ------------------------------------------------
-            # Message history
-            # ------------------------------------------------
-
-            temp_message = {
-                "role": role,
-                "content": msg.content,
-                "time": timestamp
-            }
-
-
-            if (
-                role == "assistant"
-                and component
-            ):
-
-                temp_message[
-                    "component"
-                ] = component
-
-
-            temp_messages.append(
-                temp_message
-            )
-
-
-            # ------------------------------------------------
-            # History for reward/game tree
-            # ------------------------------------------------
-
-            history.append({
-                "role": role,
-                "content": msg.content
-            })
+        (
+            temp_messages,
+            history
+        ) = rebuild_conversation_history(
+            messages
+        )
 
 
         st.session_state[
@@ -548,8 +710,10 @@ for thread_id in (
         ] = history
 
 
-        # Reset action.
-        # The next user message will select a new action.
+        # ----------------------------------------------------
+        # Reset action
+        # ----------------------------------------------------
+
         st.session_state[
             "action"
         ] = []
@@ -613,7 +777,7 @@ user_input = st.chat_input(
 if user_input:
 
     # --------------------------------------------------------
-    # Check PatientID
+    # Check Patient ID
     # --------------------------------------------------------
 
     if not PatinetID:
@@ -643,7 +807,9 @@ if user_input:
     # --------------------------------------------------------
 
     if not thread_belongs_to_patient(
-        st.session_state["thread_id"],
+        st.session_state[
+            "thread_id"
+        ],
         PatinetID
     ):
 
@@ -672,17 +838,22 @@ if user_input:
         )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # REWARD / BEHAVIOR SELECTION
-    # --------------------------------------------------------
+    # ========================================================
 
     Subset_prompt = (
         response.determine_reward_with_behaviour(
-            st.session_state["history"],
+            st.session_state[
+                "history"
+            ],
             user_input,
-            st.session_state["action"]
+            st.session_state[
+                "action"
+            ]
         )
     )
+
 
     print(
         "Reward Prompt",
@@ -702,14 +873,15 @@ if user_input:
     )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # GAME TREE
-    # --------------------------------------------------------
+    # ========================================================
 
     best_action = gameTree.dataImport(
         user_input,
         reward_data
     )
+
 
     print(
         "DBT Component",
@@ -722,24 +894,36 @@ if user_input:
     ] = best_action
 
 
-    # --------------------------------------------------------
-    # SAVE USER MESSAGE
-    # --------------------------------------------------------
+    # ========================================================
+    # SAVE USER MESSAGE TO SESSION HISTORY
+    # ========================================================
 
     st.session_state[
         "message_history"
     ].append({
-        "time": user_time,
-        "role": "user",
-        "content": user_input
+
+        "time":
+            user_time,
+
+        "role":
+            "user",
+
+        "content":
+            user_input
+
     })
 
 
     st.session_state[
         "history"
     ].append({
-        "role": "user",
-        "content": user_input
+
+        "role":
+            "user",
+
+        "content":
+            user_input
+
     })
 
 
@@ -760,6 +944,7 @@ if user_input:
 
             "thread_id":
                 current_thread_id
+
         },
 
         "metadata": {
@@ -769,9 +954,12 @@ if user_input:
 
             "patient_id":
                 PatinetID
+
         },
 
-        "run_name": "chat_turn"
+        "run_name":
+            "chat_turn"
+
     }
 
 
@@ -793,19 +981,24 @@ if user_input:
 
                 {
                     "messages": [
+
                         HumanMessage(
                             content=user_input
                         )
+
                     ],
 
                     "component":
                         best_action
+
                 },
 
                 config=CONFIG,
 
                 stream_mode="messages"
+
             )
+
         )
 
 
@@ -836,7 +1029,8 @@ if user_input:
             "assistant",
 
         "content":
-            ai_message,
+            ai_message
+
     })
 
 
@@ -849,6 +1043,7 @@ if user_input:
 
         "content":
             ai_message
+
     })
 
 
@@ -885,9 +1080,11 @@ if PatinetID:
 
     st.sidebar.download_button(
 
-        label="📥 Download Conversation",
+        label=
+            "📥 Download Conversation",
 
-        data=conversation_txt,
+        data=
+            conversation_txt,
 
         file_name=(
             f"Chat_"
@@ -896,9 +1093,13 @@ if PatinetID:
             f"{st.session_state['thread_id']}.txt"
         ),
 
-        mime="text/plain",
+        mime=
+            "text/plain",
 
-        use_container_width=True,
+        use_container_width=
+            True,
 
-        key="download_conversation"
+        key=
+            "download_conversation"
+
     )
