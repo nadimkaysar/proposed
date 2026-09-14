@@ -222,12 +222,25 @@ connection_kwargs = {
     "prepare_threshold": 0,
 }
 
+DB_URI = db_API_KEY
+
+connection_kwargs = {
+    "autocommit": True,
+    "prepare_threshold": 0,
+}
+
 pool = ConnectionPool(
     conninfo=DB_URI,
     kwargs=connection_kwargs,
     min_size=1,
     max_size=10,
+    max_lifetime=300,
+    max_idle=60,
+    timeout=30,
+    open=True,
 )
+
+pool.wait()
 
 checkpointer = PostgresSaver(pool)
 
@@ -254,42 +267,28 @@ checkpointer.setup()
 # ============================================================
 
 def register_thread(thread_id, patient_id):
-
-    if not thread_id:
-        return
-
-    if not patient_id:
-        return
-
     sql = """
-    INSERT INTO conversation_threads (
-        thread_id,
-        patient_id
-    )
+    INSERT INTO conversation_threads (thread_id, patient_id)
     VALUES (%s, %s)
-    ON CONFLICT (thread_id)
-    DO NOTHING;
+    ON CONFLICT (thread_id) DO UPDATE
+    SET patient_id = EXCLUDED.patient_id
     """
 
     with pool.connection() as conn:
-
         with conn.cursor() as cursor:
-
             cursor.execute(
                 sql,
                 (
                     str(thread_id),
-                    str(patient_id)
-                )
+                    str(patient_id),
+                ),
             )
-
 
 # ============================================================
 # GET THREADS FOR PATIENT
 # ============================================================
 
 def retrieve_threads_for_patient(patient_id):
-
     if not patient_id:
         return []
 
@@ -297,46 +296,27 @@ def retrieve_threads_for_patient(patient_id):
     SELECT thread_id
     FROM conversation_threads
     WHERE patient_id = %s
-    ORDER BY created_at DESC;
+    ORDER BY created_at DESC
     """
 
     try:
-
         with pool.connection() as conn:
-
             with conn.cursor() as cursor:
-
-                cursor.execute(
-                    sql,
-                    (str(patient_id),)
-                )
-
+                cursor.execute(sql, (str(patient_id),))
                 rows = cursor.fetchall()
 
-        return [
-            row[0]
-            for row in rows
-        ]
+        return [row[0] for row in rows]
 
     except Exception as e:
-
-        print(
-            "Patient thread retrieval error:"
-        )
+        print("Error retrieving patient threads:")
         print(e)
-
         return []
-
 
 # ============================================================
 # CHECK THREAD OWNERSHIP
 # ============================================================
 
-def thread_belongs_to_patient(
-    thread_id,
-    patient_id
-):
-
+def thread_belongs_to_patient(thread_id, patient_id):
     if not thread_id or not patient_id:
         return False
 
@@ -345,34 +325,24 @@ def thread_belongs_to_patient(
     FROM conversation_threads
     WHERE thread_id = %s
       AND patient_id = %s
-    LIMIT 1;
+    LIMIT 1
     """
 
     try:
-
         with pool.connection() as conn:
-
             with conn.cursor() as cursor:
-
                 cursor.execute(
                     sql,
                     (
                         str(thread_id),
-                        str(patient_id)
-                    )
+                        str(patient_id),
+                    ),
                 )
-
-                result = cursor.fetchone()
-
-        return result is not None
+                return cursor.fetchone() is not None
 
     except Exception as e:
-
-        print(
-            "Thread ownership check error:"
-        )
+        print("Thread ownership check error:")
         print(e)
-
         return False
 
 
