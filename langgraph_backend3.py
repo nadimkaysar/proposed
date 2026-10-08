@@ -186,7 +186,7 @@ def systemPrompt_second(component):
                   - Need to deeply understand what happened from previous session to today session from user, As like: what's the problem arise after first session, why this problem happen.
                   - Need to deeply understand how and when happened from previous session to today session from user, As like: how this problem happened, when it happen.
                   - Need to deeply understand any family issues which may effect study, as like:  what and how it happen
-                  - patient's feelings and thought's (Example: I feel like this maybe affect my this or others)
+                  - patient's feelings and thought's (Example: I feel like I am not good ennough)
                   - ask miracle question As example:  What do you want to do to make your academic life perfect?
                   - Need to informe to patient about next phase (Example: Now I will move next phase to to change your thinking about yourself)
                   </information>
