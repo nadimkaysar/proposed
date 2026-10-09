@@ -291,7 +291,7 @@ def chat_node(state: ChatState):
         ""
     )
 
-    prompt = systemPrompt_second(component_action)
+    prompt = systemPrompt(component_action)
 
     print("System Prompt", prompt)
 
