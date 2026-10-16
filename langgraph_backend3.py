@@ -351,9 +351,7 @@ def chat_node(state: ChatState):
         "component",
         ""
     )
-
     prompt = systemPrompt_second(component_action)
-
     print("System Prompt", prompt)
 
     messages_with_system_prompt = [
