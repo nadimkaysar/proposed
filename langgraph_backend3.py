@@ -206,8 +206,6 @@ def systemPrompt_second(component):
                 - I’m glad you felt okay sharing it with me.
                 - That sounds painful. I’d like to understand better
             
-              
-              Context: {history} and {user_message}
               Always remember: Stay in the **problem understanding phase** — your task is only to listen, clarify, and collect information.
 
   </problem_understanding_phase> 
