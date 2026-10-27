@@ -64,7 +64,7 @@ def systemPrompt(component):
                 - Always give example during information collection
                 - Can't generate same question, same phrase and gratitude like ('Thank you','many people face this'). If patient hesitant, start with gentle, low-stakes questions before deeper ones.  
                 - Need human like natural language tone and simple sentence. Use {component} DBT component knowledge.
-                - You have to generate your response within 70 words. I reapeat, you need to generate your response within 70 words.  
+                - You have to generate your response within 55 words. I reapeat, you need to generate your response within 55 words.  
                 
                   <information>
                   - Need to deeply understand human current days problem indetails,  as like: what's the problem, which subject or topic, when it happen, why this problem happen
@@ -89,7 +89,7 @@ def systemPrompt(component):
                     - I’m glad you felt okay sharing it with me.
                     - That sounds painful. I’d like to understand better
                 
-                You have to generate your response within 70 words.
+                You have to generate your response within 55 words.
                 Always remember: Stay in the **problem understanding phase** — your task is only to listen, clarify, and collect information.
 
     </problem_understanding_phase> 
