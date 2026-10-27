@@ -337,25 +337,21 @@ it does not count as completing the current session's understanding phase. Never
 # ============================================================
 
 def chat_node(state: ChatState):
-
     messages = state["messages"]
 
     component_action = state.get(
         "component",
         ""
     )
-    prompt = systemPrompt(component_action)
+    prompt = systemPrompt_second(component_action)
     print("System Prompt", prompt)
-
     messages_with_system_prompt = [
         SystemMessage(content=prompt),
         *messages
     ]
-
     response = llm.invoke(
         messages_with_system_prompt
     )
-
     return {
         "messages": [response]
     }
@@ -388,8 +384,6 @@ pool = ConnectionPool(
 )
 
 pool.wait()
-
-
 
 # ============================================================
 # APPLICATION-SPECIFIC THREAD TABLE
